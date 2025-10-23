@@ -1,5 +1,3 @@
-
- # #Modelo de Trafico Simple parte 2, implementacion de semaforo
 include("simple.jl")
 
 using Genie, Genie.Renderer.Html, Genie.Renderer.Json, Genie.Requests
@@ -19,13 +17,29 @@ const INSTANCES = Dict{String, Any}()
 function serialize_lights(model)
     out = Vector{Dict{String,Any}}()
     for a in allagents(model)
-        push!(out, Dict(
-            "id"          => a.id,
-            "pos"         => (Float64(a.pos[1]), Float64(a.pos[2])),
-            "orientation" => String(a.orientation),
-            "color"       => String(a.color),
-            "timer"       => a.timer
-        ))
+        if a isa TrafficLight
+            push!(out, Dict(
+                "id"          => a.id,
+                "pos"         => (Float64(a.pos[1]), Float64(a.pos[2])),
+                "orientation" => String(a.orientation),
+                "color"       => String(a.color),
+                "timer"       => a.timer
+            ))
+        end
+    end
+    return out
+end
+
+function serialize_cars(model)
+    out = Vector{Dict{String,Any}}()
+    for a in allagents(model)
+        if a isa Car
+            push!(out, Dict(
+                "id"    => a.id,
+                "pos"   => (Float64(a.pos[1]), Float64(a.pos[2])),
+                "speed" => a.speed
+            ))
+        end
     end
     return out
 end
@@ -39,14 +53,15 @@ route("/simulations", method=POST) do
     red    = get(p, "red",    DEFAULT_RED)
     seed   = get(p, "seed",   1)
 
-    model = initialize_cross_model(; green, yellow, red, seed)
+    model = initialize_cross_model(; green, yellow, red, seed, add_car=true)
     id = string(uuid1())
     INSTANCES[id] = model
 
     json(Dict(
         "id"     => id,
         "extent" => extent_tuple(model),
-        "lights" => serialize_lights(model)
+        "lights" => serialize_lights(model),
+        "cars"   => serialize_cars(model)
     ))
 end
 
@@ -56,7 +71,8 @@ route("/simulations/:id") do
     run!(model, 1)
     json(Dict(
         "extent" => extent_tuple(model),
-        "lights" => serialize_lights(model)
+        "lights" => serialize_lights(model),
+        "cars"   => serialize_cars(model)
     ))
 end
 
@@ -125,9 +141,17 @@ function drawLight(l){
   ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.strokeRect(sx-s/2, sy-s/2, s, s);
 }
 
-function render(lights){
+function drawCar(car){
+  const [sx,sy] = toScreen(car.pos);
+  const s=12; 
+  ctx.fillStyle='#0ea5e9';
+  ctx.fillRect(sx-s/2, sy-s/2, s, s);
+}
+
+function render(data){
   drawMap();
-  for(const L of lights){ drawLight(L); }
+  for(const L of data.lights){ drawLight(L); }
+  for(const C of data.cars){ drawCar(C); }
 }
 
 async function setup(){
@@ -135,7 +159,7 @@ async function setup(){
   const js  = await res.json();
   simId = js.id; extent = js.extent;
   document.getElementById('simId').textContent = simId;
-  render(js.lights);
+  render({lights: js.lights, cars: js.cars});
 }
 
 async function step(){
@@ -143,7 +167,7 @@ async function step(){
   const res = await fetch(`/simulations/${simId}`);
   const js  = await res.json();
   extent = js.extent || extent;
-  render(js.lights);
+  render({lights: js.lights, cars: js.cars});
 }
 
 document.getElementById('btnSetup').addEventListener('click', async()=>{ if(timer){clearInterval(timer); timer=null;} await setup(); });
