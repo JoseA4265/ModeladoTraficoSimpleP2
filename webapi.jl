@@ -214,7 +214,6 @@ Genie.config.server_host = "127.0.0.1"
 Genie.config.server_port = 8000
 Genie.config.run_as_server = true
 
-# CORS
 Genie.config.cors_headers["Access-Control-Allow-Origin"]  = "*"
 Genie.config.cors_headers["Access-Control-Allow-Headers"] = "Content-Type"
 Genie.config.cors_headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
