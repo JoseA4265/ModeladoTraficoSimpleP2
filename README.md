@@ -80,3 +80,14 @@ En esta etapa final, la simulación se completa con múltiples autos en ambas ca
 4.  **Mejoras de UI y Monitoreo:**
     * **Íconos Rotados:** La función `drawCar` en JavaScript fue actualizada para dibujar un **rectángulo rotado**, mostrando visualmente la orientación (`:EW` o `:NS`) del vehículo.
     * **Monitor de Velocidad:** Se añadió un reporte de "Velocidad Promedio" en la UI. Este obtiene sus datos de una nueva ruta de API (`/simulations/:id/stats`) que calcula la velocidad media de todos los agentes `Car` en el *backend* en cada paso de la simulación.
+
+
+
+
+Reflexiones individuales: 
+
+- José Antonio Díaz Méndez: 
+
+Este pequeño proyecto nos ayudo bastante a obtener una visualizacion mas clara respecto al uso de los agentes dentro de una simulacion donde cada entidad cuenta con estado y sus propias reglas locales, tambien aprendi de muchas otras reglas de las que no conocia mucho, tales como el uso de los "scheduler", aprovechamiento de la implementacion de ticks dentro de la ejecucion, utilizacion de lineas de alto y distancias minimas, parametrizacion para las duraciones del semaforo, etc. 
+
+Conocimientos los cuales entre habilidades de modelacion de agentes con sistemas y restricciones, diseño de API's, manejo de estados y ordenes de ejecucion, complementaran de forma excelente mi "caja de herramientas" como futuro ingeniero de software.
