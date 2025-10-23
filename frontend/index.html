@@ -1,4 +1,4 @@
-<!-- Modelo de Trafico Simple parte 2, semaforo implementado -->
+<!-- Modelo de Trafico Simple parte 2, semaforo implementado 
 <!doctype html>
 <html lang="es">
 <head>
@@ -76,6 +76,134 @@ function step(){
 
 document.getElementById('btnSetup').addEventListener('click', ()=>{ if(timer){clearInterval(timer); timer=null;} setup(); });
 document.getElementById('btnStart').addEventListener('click', ()=>{ if(timer) clearInterval(timer); step(); timer=setInterval(step,200); });
+document.getElementById('btnStop').addEventListener('click', ()=>{ if(timer) clearInterval(timer); timer=null; });
+
+window.addEventListener('load', setup);
+</script>
+</body>
+</html>
+-->
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cruce con semáforos + 1 auto — estático</title>
+  <style>
+    body{ margin:16px; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif }
+    .toolbar{ display:flex; gap:12px; margin-bottom:12px }
+    button{ padding:8px 14px; border:1px solid #ccc; border-radius:10px; background:#f8f8f8; cursor:pointer }
+    #stage{ border:1px solid #ddd; border-radius:20px }
+    .legend{margin-top:8px;display:flex;gap:14px}
+    .dot{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:middle}
+    .g{background:#22c55e}.y{background:#eab308}.r{background:#ef4444}.c{background:#06b6d4}
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="btnSetup">Setup</button>
+    <button id="btnStart">Start</button>
+    <button id="btnStop">Stop</button>
+  </div>
+
+  <canvas id="stage" width="560" height="560"></canvas>
+  <div class="legend">
+    <span><span class="dot g"></span>verde</span>
+    <span><span class="dot y"></span>amarillo</span>
+    <span><span class="dot r"></span>rojo</span>
+    <span><span class="dot c"></span>auto</span>
+  </div>
+
+<script>
+const extent=[30,30], GREEN=10, YELLOW=4, RED=14, CAR_SPEED=0.7, STOP_GAP=1.5;
+let lights=[], cars=[], timer=null;
+
+const c=document.getElementById('stage'), ctx=c.getContext('2d');
+function toScreen([x,y]){
+  const pad = 20;
+  const sx = pad + (x-1) * (c.width - 2*pad) / (extent[0]-1);
+  const sy = pad + (y-1) * (c.height - 2*pad) / (extent[1]-1);
+  return [sx, sy];
+}
+function drawMap(){
+  ctx.fillStyle='#3a7d2f'; ctx.fillRect(0,0,c.width,c.height);
+  const roadW=c.width*0.28, cen=c.width/2;
+  ctx.fillStyle='#111';
+  ctx.fillRect(0, cen-roadW/2, c.width, roadW);
+  ctx.fillRect(cen-roadW/2, 0, roadW, c.height);
+}
+function drawLight(l){
+  const col = l.color==='green' ? '#22c55e' : (l.color==='yellow' ? '#eab308' : '#ef4444');
+  const [sx,sy] = toScreen(l.pos); const s=16;
+  ctx.fillStyle=col; ctx.fillRect(sx-s/2, sy-s/2, s, s);
+  ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.strokeRect(sx-s/2, sy-s/2, s, s);
+}
+function drawCar(car){
+  const [sx,sy] = toScreen(car.pos);
+  ctx.fillStyle='#06b6d4';
+  ctx.fillRect(sx-14, sy-8, 28, 16);
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(sx-18, sy-11, 6, 6); ctx.fillRect(sx+12, sy-11, 6, 6);
+  ctx.fillRect(sx-18, sy+5, 6, 6);  ctx.fillRect(sx+12, sy+5, 6, 6);
+}
+function render(){ drawMap(); for(const L of lights) drawLight(L); for(const car of cars) drawCar(car); }
+
+function setup(){
+  lights = [];
+  const cx=extent[0]/2, cy=extent[1]/2;
+  lights.push({id:1, orientation:'EW', pos:[cx-1, cy], color:'green',  timer:0});
+  lights.push({id:2, orientation:'NS', pos:[cx,   cy-1], color:'red',    timer:0});
+
+  function rx(){
+    while(true){
+      const x = 2 + Math.random()*(extent[0]-4);
+      if(Math.abs(x - cx) > 3) return x;
+    }
+  }
+  cars = [{ id:101, pos:[rx(), cy], speed:CAR_SPEED }];
+  render();
+}
+
+function nextColor(c){ return c==='green'?'yellow':(c==='yellow'?'red':'green'); }
+function step_lights(){
+  for(const L of lights){
+    const dur = L.color==='green'?GREEN:(L.color==='yellow'?YELLOW:RED);
+    L.timer += 1;
+    if(L.timer >= dur){ L.color = nextColor(L.color); L.timer=0; }
+  }
+}
+function step_cars(){
+  const cx=extent[0]/2, right=extent[0]-2, left=2;
+  const lew = lights.find(l=>l.orientation==='EW');
+  const stop_x = cx - STOP_GAP;
+  for(const a of cars){
+    const proposed = a.pos[0] + a.speed;
+    const must_stop = (lew.color!=='green');
+    let newx;
+    if(must_stop){
+      if(a.pos[0] < stop_x) newx = Math.min(proposed, stop_x);
+      else newx = a.pos[0];
+    }else{
+      newx = proposed;
+    }
+    if(newx > right) newx = left;
+    a.pos = [newx, a.pos[1]];
+  }
+}
+function step(){ step_lights(); step_cars(); render(); }
+
+document.getElementById('btnSetup').addEventListener('click', ()=>{ if(timer){clearInterval(timer); timer=null;} setup(); });
+document.getElementById('btnStart').addEventListener('click', ()=>{ if(timer) clearInterval(timer); step(); timer=setInterval(step,150); });
 document.getElementById('btnStop').addEventListener('click', ()=>{ if(timer) clearInterval(timer); timer=null; });
 
 window.addEventListener('load', setup);
