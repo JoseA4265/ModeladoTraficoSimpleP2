@@ -1,4 +1,3 @@
-#=
 include("simple.jl")
 
 using Genie, Genie.Renderer.Html, Genie.Renderer.Json, Genie.Requests
@@ -36,9 +35,10 @@ function serialize_cars(model)
     for a in allagents(model)
         if a isa Car
             push!(out, Dict(
-                "id"    => a.id,
-                "pos"   => (Float64(a.pos[1]), Float64(a.pos[2])),
-                "speed" => a.speed
+                "id"          => a.id,
+                "pos"         => (Float64(a.pos[1]), Float64(a.pos[2])),
+                "speed"       => a.speed,
+                "orientation" => String(a.orientation) # <-- NUEVO
             ))
         end
     end
@@ -49,12 +49,13 @@ extent_tuple(model) = try Tuple(model.space.extent) catch; (30,30) end
 
 route("/simulations", method=POST) do
     p = jsonpayload()
-    green  = get(p, "green",  DEFAULT_GREEN)
-    yellow = get(p, "yellow", DEFAULT_YELLOW)
-    red    = get(p, "red",    DEFAULT_RED)
-    seed   = get(p, "seed",   1)
+    green    = get(p, "green",  DEFAULT_GREEN)
+    yellow   = get(p, "yellow", DEFAULT_YELLOW)
+    red      = get(p, "red",    DEFAULT_RED)
+    seed     = get(p, "seed",   1)
+    num_cars = get(p, "num_cars_per_street", 3) # <-- NUEVO
 
-    model = initialize_cross_model(; green, yellow, red, seed, add_car=true)
+    model = initialize_cross_model(; green, yellow, red, seed, num_cars_per_street=num_cars) # <-- NUEVO
     id = string(uuid1())
     INSTANCES[id] = model
 
@@ -77,6 +78,17 @@ route("/simulations/:id") do
     ))
 end
 
+# --- NUEVA RUTA PARA ESTADÍSTICAS ---
+route("/simulations/:id/stats") do
+    id = payload(:id)
+    model = INSTANCES[id]
+    avg_speed = get_avg_speed(model)
+    json(Dict(
+        "avg_speed" => avg_speed
+    ))
+end
+
+
 function ui_html()
     raw"""
 <!doctype html>
@@ -86,14 +98,16 @@ function ui_html()
 <title>Cruce con Semáforos (ABM)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
-  body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:16px}
-  .toolbar{display:flex;gap:12px;margin-bottom:12px}
+  body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:16px;background:#f9f9f9}
+  .toolbar{display:flex;gap:12px;margin-bottom:12px;align-items:center}
   button{padding:8px 14px;border:1px solid #ccc;border-radius:10px;background:#f8f8f8;cursor:pointer}
   button.primary{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
-  #stage{border:1px solid #ddd;border-radius:12px}
+  #stage{border:1px solid #ddd;border-radius:12px;background:#fff}
   .legend{margin-top:8px;display:flex;gap:14px}
   .dot{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:middle}
   .g{background:#22c55e}.y{background:#eab308}.r{background:#ef4444}
+  .stats-box{margin-left:auto;font-size:0.9em;color:#333;text-align:right}
+  input[type="number"]{width:50px;padding:6px;border-radius:6px;border:1px solid #ccc}
 </style>
 </head>
 <body>
@@ -101,7 +115,15 @@ function ui_html()
     <button id="btnSetup">Setup</button>
     <button id="btnStart" class="primary">Start</button>
     <button id="btnStop">Stop</button>
-    <div style="margin-left:auto">sim: <code id="simId">—</code></div>
+    
+    <label style="margin-left:20px;font-size:0.9em">Autos por calle: 
+        <input type="number" id="numCars" value="3" min="1" max="7" />
+    </label>
+    
+    <div class="stats-box">
+        <div>sim: <code id="simId">—</code></div>
+        <div>Vel. Promedio: <code id="avgSpeedStat">0.00</code></div>
+    </div>
   </div>
 
   <canvas id="stage" width="520" height="520"></canvas>
@@ -142,11 +164,24 @@ function drawLight(l){
   ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.strokeRect(sx-s/2, sy-s/2, s, s);
 }
 
+// --- FUNCIÓN drawCar ACTUALIZADA (para dibujar rectángulos rotados) ---
 function drawCar(car){
   const [sx,sy] = toScreen(car.pos);
-  const s=12; 
+  const carW = 12; // Largo del auto
+  const carH = 8;  // Ancho del auto
+  
+  // Rotación: 0 para :EW, 90 grados (PI/2) para :NS
+  const angle = car.orientation === 'NS' ? Math.PI / 2 : 0;
+
+  ctx.save(); // Guardar el estado del canvas
+  ctx.translate(sx, sy); // Mover el canvas al centro del auto
+  ctx.rotate(angle); // Rotar el canvas
+  
+  // Dibujar el auto centrado en (0,0)
   ctx.fillStyle='#0ea5e9';
-  ctx.fillRect(sx-s/2, sy-s/2, s, s);
+  ctx.fillRect(-carW/2, -carH/2, carW, carH);
+  
+  ctx.restore(); // Restaurar el estado (quita la traslación y rotación)
 }
 
 function render(data){
@@ -155,217 +190,50 @@ function render(data){
   for(const C of data.cars){ drawCar(C); }
 }
 
+// --- setup() ACTUALIZADO ---
 async function setup(){
-  const res = await fetch('/simulations', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  // Leer el número de autos del input
+  const numCars = document.getElementById('numCars').value || 3;
+  
+  const res = await fetch('/simulations', {
+      method:'POST', 
+      headers:{'Content-Type':'application/json'}, 
+      body: JSON.stringify({ num_cars_per_street: parseInt(numCars) }) // Enviar el número de autos
+  });
+  
   const js  = await res.json();
   simId = js.id; extent = js.extent;
   document.getElementById('simId').textContent = simId;
+  document.getElementById('avgSpeedStat').textContent = '0.00';
   render({lights: js.lights, cars: js.cars});
 }
 
+// --- step() ACTUALIZADO ---
 async function step(){
   if(!simId) return;
+  
+  // Pedir estado de agentes (esto bloquea)
   const res = await fetch(`/simulations/${simId}`);
   const js  = await res.json();
   extent = js.extent || extent;
   render({lights: js.lights, cars: js.cars});
+  
+  // Pedir estadísticas (esto no bloquea el render)
+  fetch(`/simulations/${simId}/stats`)
+    .then(res => res.json())
+    .then(stats => {
+        document.getElementById('avgSpeedStat').textContent = stats.avg_speed.toFixed(2);
+    })
+    .catch(err => console.error("Error fetching stats:", err));
 }
 
+// --- Event Listeners (sin cambios) ---
 document.getElementById('btnSetup').addEventListener('click', async()=>{ if(timer){clearInterval(timer); timer=null;} await setup(); });
 document.getElementById('btnStart').addEventListener('click', async()=>{
   if(!simId) await setup();
   if(timer) clearInterval(timer);
   await step();
   timer=setInterval(step, 200);  
-});
-document.getElementById('btnStop').addEventListener('click', ()=>{ if(timer) clearInterval(timer); timer=null; });
-
-window.addEventListener('load', setup);
-</script>
-</body>
-</html>
-"""
-end
-
-route("/") do; ui_html(); end
-route("/ui") do; ui_html(); end
-
-up()
-=#
-
-
-
-
-
-
-
-
-
-
-
-
-
-include("simple.jl")
-
-using Genie, Genie.Renderer.Html, Genie.Renderer.Json, Genie.Requests
-using UUIDs
-
-Genie.config.server_host = "127.0.0.1"
-Genie.config.server_port = 8000
-Genie.config.run_as_server = true
-
-Genie.config.cors_headers["Access-Control-Allow-Origin"]  = "*"
-Genie.config.cors_headers["Access-Control-Allow-Headers"] = "Content-Type"
-Genie.config.cors_headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
-Genie.config.cors_allowed_origins = ["*"]
-
-const INSTANCES = Dict{String, Any}()
-
-function serialize_world(model)
-    lights = Vector{Dict{String,Any}}()
-    cars   = Vector{Dict{String,Any}}()
-
-    for a in allagents(model)
-        if a isa TrafficLight
-            push!(lights, Dict(
-                "id"          => a.id,
-                "pos"         => (Float64(a.pos[1]), Float64(a.pos[2])),
-                "orientation" => String(a.orientation),
-                "color"       => String(a.color),
-                "timer"       => a.timer
-            ))
-        elseif a isa Car
-            push!(cars, Dict(
-                "id"  => a.id,
-                "pos" => (Float64(a.pos[1]), Float64(a.pos[2])),
-                "v"   => a.speed
-            ))
-        end
-    end
-    return Dict("lights"=>lights, "cars"=>cars, "extent" => Tuple(model.space.extent))
-end
-
-route("/simulations", method=POST) do
-    p = jsonpayload()
-    green  = get(p, "green",  DEFAULT_GREEN)
-    yellow = get(p, "yellow", DEFAULT_YELLOW)
-    red    = get(p, "red",    DEFAULT_RED)
-    seed   = get(p, "seed",   1)
-    addcar = get(p, "add_car", true)
-
-    model = initialize_cross_model(; green, yellow, red, seed, add_car=addcar)
-    id = string(uuid1())
-    INSTANCES[id] = model
-
-    json(Dict("id"=>id, "world"=>serialize_world(model)))
-end
-
-route("/simulations/:id") do
-    id = payload(:id)
-    model = INSTANCES[id]
-    run!(model, 1)
-    json(serialize_world(model))
-end
-
-function ui_html()
-    raw"""
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Cruce con semáforos + 1 auto</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>
-  body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:16px}
-  .toolbar{display:flex;gap:12px;margin-bottom:12px}
-  button{padding:8px 14px;border:1px solid #ccc;border-radius:10px;background:#f8f8f8;cursor:pointer}
-  button.primary{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
-  #stage{border:1px solid #ddd;border-radius:20px}
-  .legend{margin-top:8px;display:flex;gap:14px}
-  .dot{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:middle}
-  .g{background:#22c55e}.y{background:#eab308}.r{background:#ef4444}
-  .c{background:#06b6d4}
-</style>
-</head>
-<body>
-  <div class="toolbar">
-    <button id="btnSetup">Setup</button>
-    <button id="btnStart" class="primary">Start</button>
-    <button id="btnStop">Stop</button>
-    <div style="margin-left:auto">sim: <code id="simId">—</code></div>
-  </div>
-
-  <canvas id="stage" width="560" height="560"></canvas>
-  <div class="legend">
-    <span><span class="dot g"></span>verde</span>
-    <span><span class="dot y"></span>amarillo</span>
-    <span><span class="dot r"></span>rojo</span>
-    <span><span class="dot c"></span>auto</span>
-  </div>
-
-<script>
-let simId=null, timer=null, extent=[30,30];
-
-const c=document.getElementById('stage'), ctx=c.getContext('2d');
-function toScreen([x,y]){
-  const pad = 20;
-  const sx = pad + (x-1) * (c.width - 2*pad) / (extent[0]-1);
-  const sy = pad + (y-1) * (c.height - 2*pad) / (extent[1]-1);
-  return [sx, sy];
-}
-
-function drawMap(){
-  ctx.fillStyle='#3a7d2f'; ctx.fillRect(0,0,c.width,c.height);
-  const roadW=c.width*0.28, cen=c.width/2;
-  ctx.fillStyle='#111';
-  ctx.fillRect(0, cen-roadW/2, c.width, roadW);    
-  ctx.fillRect(cen-roadW/2, 0, roadW, c.height);   
-}
-
-function drawLight(l){
-  const col = l.color==='green' ? '#22c55e' : (l.color==='yellow' ? '#eab308' : '#ef4444');
-  const [sx,sy] = toScreen(l.pos);
-  const s=16; ctx.fillStyle=col; ctx.fillRect(sx-s/2, sy-s/2, s, s);
-  ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.strokeRect(sx-s/2, sy-s/2, s, s);
-}
-
-function drawCar(car){
-  const [sx,sy] = toScreen(car.pos);
-  ctx.fillStyle='#06b6d4';
-  ctx.fillRect(sx-14, sy-8, 28, 16); 
-  ctx.fillStyle='#0f172a';
-  ctx.fillRect(sx-18, sy-11, 6, 6); ctx.fillRect(sx+12, sy-11, 6, 6);
-  ctx.fillRect(sx-18, sy+5, 6, 6);  ctx.fillRect(sx+12, sy+5, 6, 6);
-}
-
-function render(world){
-  drawMap();
-  for(const L of world.lights) drawLight(L);
-  for(const car of world.cars) drawCar(car);
-}
-
-async function setup(){
-  const res = await fetch('/simulations', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({"add_car": true})});
-  const js  = await res.json();
-  simId = js.id; extent = js.world.extent;
-  document.getElementById('simId').textContent = simId;
-  render(js.world);
-}
-
-async function step(){
-  if(!simId) return;
-  const res = await fetch(`/simulations/${simId}`);
-  const js  = await res.json();
-  extent = js.extent || extent;
-  render(js);
-}
-
-document.getElementById('btnSetup').addEventListener('click', async()=>{ if(timer){clearInterval(timer); timer=null;} await setup(); });
-document.getElementById('btnStart').addEventListener('click', async()=>{
-  if(!simId) await setup();
-  if(timer) clearInterval(timer);
-  await step();
-  timer=setInterval(step, 150);
 });
 document.getElementById('btnStop').addEventListener('click', ()=>{ if(timer) clearInterval(timer); timer=null; });
 
