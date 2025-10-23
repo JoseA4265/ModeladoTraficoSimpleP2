@@ -125,36 +125,27 @@ end
 
 
 
-
-
-
-
-
-
-
-
 using Agents, Random
 using StaticArrays: SVector
 using Distributions: Uniform
 
 @agent struct TrafficLight(ContinuousAgent{2,Float64})
     orientation::Symbol 
-    color::Symbol        
-    timer::Int            
+    color::Symbol       
+    timer::Int          
 end
 
 @agent struct Car(ContinuousAgent{2,Float64})
-    speed::Float64       
+    speed::Float64        
 end
-
 
 const DEFAULT_GREEN  = 10
 const DEFAULT_YELLOW = 4
 const DEFAULT_RED    = 14
 
-const CAR_SPEED   = 0.7     
-const STOP_GAP    = 1.5      
-const LEFT_RESPAWN = 2.0     
+const CAR_SPEED   = 0.7   
+const STOP_GAP    = 1.5   
+const LEFT_RESPAWN = 2.0 
 const RIGHT_MARGIN = 2.0     
 
 cycle_len(g,y,r) = g + y + r
@@ -193,7 +184,6 @@ function car_step!(a::Car, model)
             newx = a.pos[1]
         end
     else
-
         newx = proposed
     end
 
@@ -207,6 +197,7 @@ end
 agent_step!(l::TrafficLight, m) = light_step!(l, m)
 agent_step!(c::Car,         m) = car_step!(c, m)
 
+
 function initialize_cross_model(extent::Tuple{Int,Int}=(30,30);
                                 seed::Int=1,
                                 green::Int=DEFAULT_GREEN,
@@ -214,7 +205,7 @@ function initialize_cross_model(extent::Tuple{Int,Int}=(30,30);
                                 red::Int=DEFAULT_RED,
                                 add_car::Bool=true)
 
-    @assert extent[1] == extent[2]
+    @assert extent[1] == extent[2] 
 
     space2d = ContinuousSpace(extent; spacing = 1.0, periodic = false)
     rng     = Random.MersenneTwister(seed)
@@ -252,6 +243,7 @@ function initialize_cross_model(extent::Tuple{Int,Int}=(30,30);
 
     return model
 end
+
 
 if abspath(PROGRAM_FILE) == @__FILE__
     m = initialize_cross_model(; add_car=true)
