@@ -38,7 +38,7 @@ function serialize_cars(model)
                 "id"          => a.id,
                 "pos"         => (Float64(a.pos[1]), Float64(a.pos[2])),
                 "speed"       => a.speed,
-                "orientation" => String(a.orientation) # <-- NUEVO
+                "orientation" => String(a.orientation) 
             ))
         end
     end
@@ -53,9 +53,9 @@ route("/simulations", method=POST) do
     yellow   = get(p, "yellow", DEFAULT_YELLOW)
     red      = get(p, "red",    DEFAULT_RED)
     seed     = get(p, "seed",   1)
-    num_cars = get(p, "num_cars_per_street", 3) # <-- NUEVO
+    num_cars = get(p, "num_cars_per_street", 3) 
 
-    model = initialize_cross_model(; green, yellow, red, seed, num_cars_per_street=num_cars) # <-- NUEVO
+    model = initialize_cross_model(; green, yellow, red, seed, num_cars_per_street=num_cars) 
     id = string(uuid1())
     INSTANCES[id] = model
 
@@ -78,7 +78,6 @@ route("/simulations/:id") do
     ))
 end
 
-# --- NUEVA RUTA PARA ESTADÍSTICAS ---
 route("/simulations/:id/stats") do
     id = payload(:id)
     model = INSTANCES[id]
@@ -164,24 +163,21 @@ function drawLight(l){
   ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.strokeRect(sx-s/2, sy-s/2, s, s);
 }
 
-// --- FUNCIÓN drawCar ACTUALIZADA (para dibujar rectángulos rotados) ---
 function drawCar(car){
   const [sx,sy] = toScreen(car.pos);
-  const carW = 12; // Largo del auto
-  const carH = 8;  // Ancho del auto
+  const carW = 12; 
+  const carH = 8;  
   
-  // Rotación: 0 para :EW, 90 grados (PI/2) para :NS
   const angle = car.orientation === 'NS' ? Math.PI / 2 : 0;
 
-  ctx.save(); // Guardar el estado del canvas
-  ctx.translate(sx, sy); // Mover el canvas al centro del auto
-  ctx.rotate(angle); // Rotar el canvas
+  ctx.save(); 
+  ctx.translate(sx, sy); 
+  ctx.rotate(angle); 
   
-  // Dibujar el auto centrado en (0,0)
   ctx.fillStyle='#0ea5e9';
   ctx.fillRect(-carW/2, -carH/2, carW, carH);
   
-  ctx.restore(); // Restaurar el estado (quita la traslación y rotación)
+  ctx.restore(); 
 }
 
 function render(data){
@@ -190,15 +186,13 @@ function render(data){
   for(const C of data.cars){ drawCar(C); }
 }
 
-// --- setup() ACTUALIZADO ---
 async function setup(){
-  // Leer el número de autos del input
   const numCars = document.getElementById('numCars').value || 3;
   
   const res = await fetch('/simulations', {
       method:'POST', 
       headers:{'Content-Type':'application/json'}, 
-      body: JSON.stringify({ num_cars_per_street: parseInt(numCars) }) // Enviar el número de autos
+      body: JSON.stringify({ num_cars_per_street: parseInt(numCars) }) 
   });
   
   const js  = await res.json();
@@ -208,17 +202,14 @@ async function setup(){
   render({lights: js.lights, cars: js.cars});
 }
 
-// --- step() ACTUALIZADO ---
 async function step(){
   if(!simId) return;
   
-  // Pedir estado de agentes (esto bloquea)
   const res = await fetch(`/simulations/${simId}`);
   const js  = await res.json();
   extent = js.extent || extent;
   render({lights: js.lights, cars: js.cars});
   
-  // Pedir estadísticas (esto no bloquea el render)
   fetch(`/simulations/${simId}/stats`)
     .then(res => res.json())
     .then(stats => {
@@ -227,7 +218,6 @@ async function step(){
     .catch(err => console.error("Error fetching stats:", err));
 }
 
-// --- Event Listeners (sin cambios) ---
 document.getElementById('btnSetup').addEventListener('click', async()=>{ if(timer){clearInterval(timer); timer=null;} await setup(); });
 document.getElementById('btnStart').addEventListener('click', async()=>{
   if(!simId) await setup();
